@@ -1,0 +1,187 @@
+PROJECT SUMMARY — isiZulu Learning App (Firestore + Gemini)
+Goal
+
+Build a personal isiZulu learning app that:
+
+Stores stories sentence-by-sentence
+
+Provides English translations + grammar explanations
+
+Builds a growing isiZulu lexicon
+
+Avoids re-sending known words to Gemini
+
+Supports learning progress and spaced repetition
+
+Uses a minimal Tkinter GUI
+
+TECH STACK
+
+Python 3.13
+
+Tkinter GUI (tabs)
+
+Firestore (database_id = "isizulu")
+
+Gemini (translation + grammar + lexicon analysis)
+
+FIRESTORE STRUCTURE
+stories (collection)
+
+stories/{storyId}
+  - title
+  - level
+  - language
+  - sentenceCount
+  - createdAt
+
+sentences (subcollection)
+stories/{storyId}/sentences/{sentenceId}
+  - index
+  - text_zu
+  - translation.en
+  - grammar.brief
+  - grammar.concepts[]
+  - tokens[]        # VERY IMPORTANT (stored at ingest time)
+
+  lexicon_words (collection)
+lexicon_words/{wordId}
+  - lemma
+  - pos                  # noun | verb | auxiliary | etc
+  - nounClass
+  - infinitive
+  - auxiliaryType
+  - frequency
+  - surfaceForms[]
+  - isProperNoun
+
+  - learning:        # spaced repetition
+      known
+      ease
+      intervalDays
+      repetitions
+      lastReviewedAt
+      nextReviewAt
+
+  - analysisVersion
+  - analysisModel
+
+  KEY DESIGN DECISIONS
+1️⃣ Incremental sentence saving
+
+Sentences are flushed to Firestore every N sentences to prevent:
+
+“story exists but has 0 sentences”
+
+2️⃣ Lexicon enrichment optimization
+
+Only send tokens to Gemini if enrichment is missing:
+
+missing lemma / POS
+
+noun without nounClass
+
+verb without infinitive
+
+OR analysisVersion changed
+
+Implemented via:
+
+repo.get_words_batch()
+needs_enrichment(...)
+
+3️⃣ Auxiliary taxonomy (critical)
+
+Gemini mislabels auxiliaries as verbs (e.g. kade → ukukade ❌)
+
+Rule layer added on top of Gemini:
+
+Auxiliary lemmas:
+
+se, kade, be, ya, nga, ma, ka, ye, zo
+
+
+Rule:
+
+force pos = "auxiliary"
+
+set auxiliaryType
+
+remove infinitive + nounClass
+
+This fixes entries like:
+
+Wayekade → auxiliary (past-perfect)
+
+4️⃣ Database correction script
+
+A one-off script was written to:
+
+scan existing lexicon docs
+
+fix auxiliary misclassification
+
+remove fake infinitives
+
+add metadata (analysisVersion, analysisModel)
+
+5️⃣ Learning UX (Learn tab)
+
+Learn tab supports:
+
+sentence navigation
+
+hide/show English
+
+2-stage Hint (concepts → brief rule)
+
+dictionary lookup per word
+
+“Understood” button:
+
+marks all words in sentence as learning.known = True
+
+REFACTOR (IMPORTANT)
+
+story_service.py became too large → refactored into:
+
+services/
+  story_service.py     # orchestrator only
+  sentence_service.py  # sentence AI + saving
+  lexicon_service.py   # lexicon base + enrichment
+
+rules/
+  auxiliaries.py       # auxiliary taxonomy + overrides
+
+utils/
+  logger.py            # progress logging
+
+CURRENT ISSUE (last state)
+
+After refactor, Windows import error:
+
+ModuleNotFoundError: No module named 'rules.auxiliaries'
+
+
+Cause: missing __init__.py or incorrect package imports.
+
+Fix options:
+
+Add __init__.py to:
+
+project root
+
+services/
+
+rules/
+
+utils/
+
+Run app as module:
+
+python -m isizulu_app.app
+
+
+Or switch to absolute imports:
+
+from isizulu_app.rules.auxiliaries import ...

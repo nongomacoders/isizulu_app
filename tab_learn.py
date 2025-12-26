@@ -1,18 +1,13 @@
 # tab_learn.py
-# Minimal "Learn" tab:
-# - Choose a story
-# - Navigate sentence-by-sentence
-# - Hide/Show English
-# - Hint button cycles: (1) concepts only -> (2) grammar brief + concepts -> (3) off
-# - Click a word to view dictionary (lemma, POS, noun class, infinitive, etc.)
-# - NEW: "Understood" button marks all words in sentence as learning.known=True
 
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import List, Dict, Any, Optional
 
 from utils_text import tokenize_zu
-from story_service import normalize_word_id
+from services.lexicon_service import normalize_word_id
+from utils.morphology_zu import breakdown_verb_token, format_breakdown
+from rules.auxiliary_explain import explain_auxiliary
 
 
 class LearnTab(ttk.Frame):
@@ -25,14 +20,12 @@ class LearnTab(ttk.Frame):
         self.story_id: Optional[str] = None
         self.idx: int = 0
 
-        # English visibility + hint cycling
         self.show_english = tk.BooleanVar(value=True)
         self.hint_state = 0  # 0=off, 1=concepts only, 2=brief+concepts
 
-        # Cache for the displayed sentence
-        self._full_cache = ""       # English + grammar
-        self._hint1_cache = ""      # concepts only
-        self._hint2_cache = ""      # brief + concepts
+        self._full_cache = ""
+        self._hint1_cache = ""
+        self._hint2_cache = ""
 
         self._build()
         self._refresh_stories()
@@ -41,7 +34,6 @@ class LearnTab(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)
 
-        # Top row: story chooser
         top = ttk.Frame(self)
         top.grid(row=0, column=0, sticky="we", padx=10, pady=10)
         top.columnconfigure(1, weight=1)
@@ -51,10 +43,8 @@ class LearnTab(ttk.Frame):
         self.story_combo = ttk.Combobox(top, textvariable=self.story_var, state="readonly")
         self.story_combo.grid(row=0, column=1, sticky="we", padx=(8, 8))
         self.story_combo.bind("<<ComboboxSelected>>", lambda e: self._load_selected_story())
-
         ttk.Button(top, text="Refresh", command=self._refresh_stories).grid(row=0, column=2, sticky="e")
 
-        # Nav row: previous/next + hide/show + hint + understood
         nav = ttk.Frame(self)
         nav.grid(row=1, column=0, sticky="we", padx=10)
         nav.columnconfigure(1, weight=1)
@@ -77,7 +67,6 @@ class LearnTab(ttk.Frame):
         self.understood_btn = ttk.Button(nav, text="Understood", command=self._mark_sentence_understood)
         self.understood_btn.grid(row=0, column=5, sticky="e", padx=(8, 0))
 
-        # Main area
         main = ttk.Frame(self)
         main.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         main.columnconfigure(0, weight=2)
@@ -96,17 +85,13 @@ class LearnTab(ttk.Frame):
         self.tokens.bind("<<ListboxSelect>>", lambda e: self._show_word())
 
         ttk.Label(main, text="English / Grammar / Hint").grid(row=2, column=0, sticky="w", pady=(10, 0))
-        ttk.Label(main, text="Dictionary").grid(row=2, column=1, sticky="w", pady=(10, 0))
+        ttk.Label(main, text="Dictionary / Analysis").grid(row=2, column=1, sticky="w", pady=(10, 0))
 
         self.info_txt = tk.Text(main, height=10, wrap="word", state="disabled")
         self.info_txt.grid(row=3, column=0, sticky="nsew", padx=(0, 10), pady=(4, 0))
 
         self.word_txt = tk.Text(main, height=10, wrap="word", state="disabled")
         self.word_txt.grid(row=3, column=1, sticky="nsew", pady=(4, 0))
-
-    # -----------------------------
-    # Story loading
-    # -----------------------------
 
     def _refresh_stories(self):
         try:
@@ -155,10 +140,6 @@ class LearnTab(ttk.Frame):
         self.toggle_btn.configure(text="Hide English")
         self._render()
 
-    # -----------------------------
-    # Navigation
-    # -----------------------------
-
     def _prev(self):
         if self.idx > 0:
             self.idx -= 1
@@ -171,20 +152,14 @@ class LearnTab(ttk.Frame):
             self.hint_state = 0
             self._render()
 
-    # -----------------------------
-    # Hide/show English and hints
-    # -----------------------------
-
     def _toggle_english(self):
         self.show_english.set(not self.show_english.get())
-
         if self.show_english.get():
             self.toggle_btn.configure(text="Hide English")
             self.hint_state = 0
         else:
             self.toggle_btn.configure(text="Show English")
             self.hint_state = 0
-
         self._render_info_only()
 
     def _cycle_hint(self):
@@ -197,17 +172,12 @@ class LearnTab(ttk.Frame):
         if self.show_english.get():
             self._set_text(self.info_txt, self._full_cache)
             return
-
         if self.hint_state == 1:
             self._set_text(self.info_txt, self._hint1_cache)
         elif self.hint_state == 2:
             self._set_text(self.info_txt, self._hint2_cache)
         else:
             self._set_text(self.info_txt, "")
-
-    # -----------------------------
-    # Learning action
-    # -----------------------------
 
     def _current_sentence_tokens(self) -> List[str]:
         if not self.sentences:
@@ -216,36 +186,24 @@ class LearnTab(ttk.Frame):
         toks = s.get("tokens")
         if isinstance(toks, list) and toks:
             return [str(t).strip() for t in toks if str(t).strip()]
-
-        # Fallback for older sentences that don't store tokens
         zu = (s.get("text_zu") or "").strip()
         return tokenize_zu(zu)
 
     def _mark_sentence_understood(self):
         if not self.sentences:
             return
-
         toks = self._current_sentence_tokens()
         if not toks:
             messagebox.showwarning("No tokens", "No words found for this sentence.")
             return
-
-        # Normalize and de-duplicate
         word_ids = sorted({normalize_word_id(t) for t in toks})
-
         try:
             for wid in word_ids:
-                # Minimal: mark known. (You can later expand to SM-2 scheduling.)
                 self.repo.update_word_learning(wid, {"known": True})
         except Exception as e:
             messagebox.showerror("Error", f"Failed to mark words as known:\n{e}")
             return
-
         messagebox.showinfo("Saved", f"Marked {len(word_ids)} word(s) as known.")
-
-    # -----------------------------
-    # Rendering
-    # -----------------------------
 
     def _render(self):
         total = len(self.sentences)
@@ -275,7 +233,6 @@ class LearnTab(ttk.Frame):
         else:
             concepts_str = str(concepts).strip()
 
-        # Hint caches
         self._hint1_cache = (f"Concepts: {concepts_str}" if concepts_str else "Concepts: (none)").strip()
         if brief and concepts_str:
             self._hint2_cache = f"{brief}\n\nConcepts: {concepts_str}".strip()
@@ -286,7 +243,6 @@ class LearnTab(ttk.Frame):
         else:
             self._hint2_cache = "(No grammar saved for this sentence.)"
 
-        # Full cache
         if en and brief and concepts_str:
             self._full_cache = f"{en}\n\n{brief}\n\nConcepts: {concepts_str}".strip()
         elif en and brief:
@@ -311,10 +267,6 @@ class LearnTab(ttk.Frame):
         self.next_btn.configure(state=("disabled" if self.idx == total - 1 else "normal"))
         self.understood_btn.configure(state="normal")
 
-    # -----------------------------
-    # Dictionary lookup
-    # -----------------------------
-
     def _show_word(self):
         sel = self.tokens.curselection()
         if not sel:
@@ -332,19 +284,23 @@ class LearnTab(ttk.Frame):
             self._set_text(self.word_txt, f"{token}\n\nNo entry yet.\n(wordId: {wid})")
             return
 
+        lemma = w.get("lemma")
+        pos = (w.get("pos") or "").strip().lower()
+
         lines = [f"Token: {token}", f"Word ID: {wid}"]
 
-        # Learning state (optional display)
         learning = w.get("learning") or {}
         if isinstance(learning, dict) and learning:
             known = learning.get("known")
             if known is not None:
                 lines.append(f"Known: {known}")
 
-        if w.get("lemma"):
-            lines.append(f"Lemma: {w.get('lemma')}")
+        if lemma:
+            lines.append(f"Lemma: {lemma}")
         if w.get("pos"):
             lines.append(f"POS: {w.get('pos')}")
+        if w.get("auxiliaryType"):
+            lines.append(f"Aux type: {w.get('auxiliaryType')}")
         if w.get("nounClass"):
             lines.append(f"Noun class: {w.get('nounClass')}")
         if w.get("infinitive"):
@@ -356,16 +312,28 @@ class LearnTab(ttk.Frame):
 
         lines.append("")
         lines.append(f"Frequency: {w.get('frequency', 0)}")
-
         sf = w.get("surfaceForms") or []
         if sf:
             lines.append("Surface forms: " + ", ".join(sf[:25]))
 
-        self._set_text(self.word_txt, "\n".join(lines))
+        # -----------------------------
+        # NEW: Auxiliary-specific explanation
+        # -----------------------------
+        if pos == "auxiliary":
+            aux_type = (w.get("auxiliaryType") or "").strip()
+            lines.append("")
+            lines.append("Auxiliary explanation")
+            lines.append(explain_auxiliary(aux_type))
 
-    # -----------------------------
-    # Utility
-    # -----------------------------
+        # -----------------------------
+        # NEW: Verb morphology breakdown (heuristic)
+        # -----------------------------
+        if pos == "verb":
+            b = breakdown_verb_token(token, lemma=lemma)
+            lines.append("")
+            lines.append(format_breakdown(b))
+
+        self._set_text(self.word_txt, "\n".join(lines))
 
     def _set_text(self, widget: tk.Text, text: str):
         widget.configure(state="normal")

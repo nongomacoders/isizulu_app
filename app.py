@@ -2,7 +2,7 @@
 from config import load_config
 from gemini_client import GeminiClient
 from firestore_repo import FirestoreRepo
-from story_service import StoryService
+from services.story_service import StoryService
 from gui import MainGUI
 
 
