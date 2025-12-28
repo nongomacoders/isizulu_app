@@ -4,7 +4,26 @@ from firebase_admin import credentials, firestore
 
 
 class FirestoreRepo:
-    def __init__(self, service_account_path: str, stories_collection: str, lexicon_collection: str):
+    """
+    Firestore repository for:
+      - stories
+      - lexicon
+      - theory docs
+
+    Adds a fast 'theory catalog' index stored at:
+      meta/theory_catalog
+    with fields:
+      - idMap: { "<concept_id>": true or {title, level, updatedAt} }
+      - updatedAt: server timestamp
+    """
+
+    def __init__(
+        self,
+        service_account_path: str,
+        stories_collection: str,
+        lexicon_collection: str,
+        theory_collection: str,
+    ):
         if not firebase_admin._apps:
             cred = credentials.Certificate(service_account_path)
             firebase_admin.initialize_app(cred)
@@ -12,6 +31,11 @@ class FirestoreRepo:
         self.db = firestore.client(database_id="isizulu")
         self.stories_collection = stories_collection
         self.lexicon_collection = lexicon_collection
+        self.theory_collection = theory_collection
+
+        # Catalog location
+        self._meta_collection = "meta"
+        self._theory_catalog_doc = "theory_catalog"
 
     # -----------------------------
     # WRITE METHODS
@@ -66,6 +90,117 @@ class FirestoreRepo:
             data.setdefault("createdAt", firestore.SERVER_TIMESTAMP)
             batch.set(ref, data, merge=True)
         batch.commit()
+
+    # -----------------------------
+    # THEORY CATALOG (FAST INDEX)
+    # -----------------------------
+
+    def _catalog_ref(self):
+        return self.db.collection(self._meta_collection).document(self._theory_catalog_doc)
+
+    def ensure_theory_catalog(self) -> None:
+        """
+        Creates the catalog doc if it doesn't exist.
+        Safe to call anytime.
+        """
+        ref = self._catalog_ref()
+        snap = ref.get()
+        if snap.exists:
+            return
+        ref.set(
+            {
+                "idMap": {},
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+    def get_theory_catalog_map(self) -> Dict[str, Any]:
+        """
+        Returns the catalog idMap, e.g.
+          {"pluperfect_tense": True, "auxiliary_kade": {"title":..., "level":...}}
+
+        One Firestore read.
+        """
+        ref = self._catalog_ref()
+        snap = ref.get()
+        if not snap.exists:
+            return {}
+        d = snap.to_dict() or {}
+        id_map = d.get("idMap") or {}
+        if not isinstance(id_map, dict):
+            return {}
+        # normalize keys to lowercase
+        out = {}
+        for k, v in id_map.items():
+            if not k:
+                continue
+            out[str(k).strip().lower()] = v
+        return out
+
+    def update_theory_catalog(self, concept_id: str, title: Optional[str] = None, level: Optional[str] = None) -> None:
+        """
+        Adds/updates a concept id in the catalog.
+        Uses merge=True so it only touches that key.
+        """
+        cid = (concept_id or "").strip().lower()
+        if not cid:
+            return
+
+        ref = self._catalog_ref()
+
+        # Keep it simple: store either True, or store small metadata if available.
+        if title or level:
+            payload_value: Any = {
+                "title": (title or "").strip(),
+                "level": (level or "").strip(),
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            }
+        else:
+            payload_value = True
+
+        ref.set(
+            {
+                "idMap": {cid: payload_value},
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+    def rebuild_theory_catalog(self, limit: int = 2000) -> int:
+        """
+        Admin helper: scans theory docs and rebuilds the catalog.
+        Returns number of theory docs indexed.
+
+        Use if you manually edited/deleted theory docs outside the app.
+        """
+        qs = self.db.collection(self.theory_collection).limit(limit).stream()
+
+        id_map: Dict[str, Any] = {}
+        count = 0
+        for snap in qs:
+            if not snap.exists:
+                continue
+            d = snap.to_dict() or {}
+            cid = (d.get("conceptId") or snap.id or "").strip().lower()
+            if not cid:
+                continue
+            title = (d.get("title") or "").strip()
+            level = (d.get("level") or "").strip()
+            if title or level:
+                id_map[cid] = {"title": title, "level": level}
+            else:
+                id_map[cid] = True
+            count += 1
+
+        self._catalog_ref().set(
+            {
+                "idMap": id_map,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=False,
+        )
+        return count
 
     # -----------------------------
     # READ METHODS
@@ -137,4 +272,118 @@ class FirestoreRepo:
         for snap in snaps:
             if snap.exists:
                 out[snap.id] = snap.to_dict() or {}
+        return out
+
+    # -----------------------------
+    # THEORY READS
+    # -----------------------------
+
+    def search_theory(self, query: str, limit: int = 50):
+        q = (query or "").strip().lower()
+        out = []
+
+        # 1) Exact doc id match
+        doc = self.db.collection(self.theory_collection).document(q).get()
+        if doc.exists:
+            d = doc.to_dict() or {}
+            d["id"] = doc.id
+            d.setdefault("conceptId", doc.id)
+            return [d]
+
+        # 2) Tag match
+        qs = (
+            self.db.collection(self.theory_collection)
+            .where("tags", "array_contains", q)
+            .limit(limit)
+            .stream()
+        )
+        for snap in qs:
+            d = snap.to_dict() or {}
+            d["id"] = snap.id
+            d.setdefault("conceptId", snap.id)
+            out.append(d)
+
+        return out
+
+    def get_theory_by_concepts(self, concepts: list[str], limit: int = 50):
+        # Multi-concept best effort:
+        # - fetch exact ids where possible
+        # - otherwise tag search per concept (dedup)
+        found = {}
+        concepts_norm = [(c or "").strip().lower() for c in concepts if (c or "").strip()]
+        if not concepts_norm:
+            return []
+
+        # exact id fetch (still okay for small lists, but not used for "missing" anymore)
+        for c in concepts_norm:
+            snap = self.db.collection(self.theory_collection).document(c).get()
+            if snap.exists:
+                d = snap.to_dict() or {}
+                d["id"] = snap.id
+                d.setdefault("conceptId", snap.id)
+                found[snap.id] = d
+
+        # tag search
+        if len(found) < limit:
+            for c in concepts_norm:
+                qs = (
+                    self.db.collection(self.theory_collection)
+                    .where("tags", "array_contains", c)
+                    .limit(limit)
+                    .stream()
+                )
+                for snap in qs:
+                    if snap.id in found:
+                        continue
+                    d = snap.to_dict() or {}
+                    d["id"] = snap.id
+                    d.setdefault("conceptId", snap.id)
+                    found[snap.id] = d
+                    if len(found) >= limit:
+                        break
+                if len(found) >= limit:
+                    break
+
+        return list(found.values())
+
+    def create_or_update_theory_doc(self, concept_id: str, data: dict) -> None:
+        """
+        Writes theory/{concept_id} and updates meta/theory_catalog.
+        """
+        cid = (concept_id or "").strip().lower()
+        if not cid:
+            raise ValueError("concept_id is empty")
+
+        ref = self.db.collection(self.theory_collection).document(cid)
+        payload = dict(data)
+        payload["conceptId"] = cid
+        payload.setdefault("createdAt", firestore.SERVER_TIMESTAMP)
+        payload["updatedAt"] = firestore.SERVER_TIMESTAMP
+        ref.set(payload, merge=True)
+
+        # Update fast index catalog (1 extra write)
+        title = (payload.get("title") or "").strip()
+        level = (payload.get("level") or "").strip()
+        self.update_theory_catalog(cid, title=title or None, level=level or None)
+
+    def theory_exists(self, concept_id: str) -> bool:
+        cid = (concept_id or "").strip().lower()
+        if not cid:
+            return False
+        snap = self.db.collection(self.theory_collection).document(cid).get()
+        return bool(snap.exists)
+
+    def list_theory_docs(self, limit: int = 200):
+        qs = (
+            self.db.collection(self.theory_collection)
+            .order_by("conceptId")
+            .limit(limit)
+            .stream()
+        )
+        out = []
+        for snap in qs:
+            d = snap.to_dict() or {}
+            d["id"] = snap.id
+            d.setdefault("conceptId", snap.id)
+            out.append(d)
         return out

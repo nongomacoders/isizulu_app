@@ -67,6 +67,9 @@ class LearnTab(ttk.Frame):
         self.understood_btn = ttk.Button(nav, text="Understood", command=self._mark_sentence_understood)
         self.understood_btn.grid(row=0, column=5, sticky="e", padx=(8, 0))
 
+        self.theory_btn = ttk.Button(nav, text="Theory", command=self._open_theory_for_sentence)
+        self.theory_btn.grid(row=0, column=6, sticky="e", padx=(8, 0))
+
         main = ttk.Frame(self)
         main.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         main.columnconfigure(0, weight=2)
@@ -92,6 +95,26 @@ class LearnTab(ttk.Frame):
 
         self.word_txt = tk.Text(main, height=10, wrap="word", state="disabled")
         self.word_txt.grid(row=3, column=1, sticky="nsew", pady=(4, 0))
+    
+    def _open_theory_for_sentence(self):
+        if not self.sentences:
+            return
+        s = self.sentences[self.idx]
+        concepts = (s.get("grammar") or {}).get("concepts") or []
+        if not isinstance(concepts, list) or not concepts:
+            messagebox.showinfo("Theory", "No concepts for this sentence.")
+            return
+
+        if hasattr(self, "_theory_tab") and hasattr(self, "_notebook"):
+            self._theory_tab.load_concepts(concepts)
+            self._notebook.select(self._theory_tab)
+        else:
+            messagebox.showerror("Theory", "Theory tab not connected.")
+
+
+    def set_theory_tab(self, theory_tab, notebook):
+        self._theory_tab = theory_tab
+        self._notebook = notebook
 
     def _refresh_stories(self):
         try:

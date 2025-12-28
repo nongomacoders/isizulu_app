@@ -1,9 +1,9 @@
-# gui.py
 import tkinter as tk
 from tkinter import ttk
 
 from tab_create import CreateTab
 from tab_learn import LearnTab
+from tab_theory import TheoryTab
 
 
 class MainGUI(tk.Tk):
@@ -12,8 +12,18 @@ class MainGUI(tk.Tk):
         self.title("isiZulu Story App")
         self.geometry("1000x760")
 
-        nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True)
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill="both", expand=True)
 
-        nb.add(CreateTab(nb, service=service), text="Create")
-        nb.add(LearnTab(nb, repo=repo), text="Learn")
+        # Create tabs (ONLY ONCE each)
+        self.create_tab = CreateTab(self.notebook, service=service)
+        self.learn_tab = LearnTab(self.notebook, repo=repo)
+        self.theory_tab = TheoryTab(self.notebook, repo=repo, gemini=service.gemini)
+
+        # Add tabs
+        self.notebook.add(self.create_tab, text="Create")
+        self.notebook.add(self.learn_tab, text="Learn")
+        self.notebook.add(self.theory_tab, text="Theory")
+
+        # Allow Learn tab to open Theory tab cleanly
+        self.learn_tab.set_theory_tab(self.theory_tab, self.notebook)

@@ -1,0 +1,85 @@
+2025-12-28 20:03:38,146 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2025-12-28 20:04:05,830 | INFO | gemini_client | Gemini generate_theory_doc request. cid=past_progressive_tense model=gemini-2.5-flash related=['past_progressive_tense']
+2025-12-28 20:04:05,830 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 20:04:26,468 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 20:04:28,051 | INFO | gemini_client | Gemini generate_theory_doc request. cid=subject_concord_class_1 model=gemini-2.5-flash related=['subject_concord_class_1']
+2025-12-28 20:04:28,080 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 20:04:41,315 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 20:04:42,957 | INFO | gemini_client | Gemini generate_theory_doc request. cid=se_infix model=gemini-2.5-flash related=['se_infix']
+2025-12-28 20:04:42,958 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 20:04:48,487 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 20:04:50,071 | INFO | gemini_client | Gemini generate_theory_doc request. cid=locative model=gemini-2.5-flash related=['locative']
+2025-12-28 20:04:50,071 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 20:05:14,703 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 20:05:16,292 | INFO | gemini_client | Gemini generate_theory_doc request. cid=applied_suffix model=gemini-2.5-flash related=['applied_suffix']
+2025-12-28 20:05:16,292 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 20:05:38,137 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 20:15:25,023 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2025-12-28 21:29:43,944 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2025-12-28 21:30:03,872 | ERROR | tab_theory | Theory generation failed. cid=past_progressive_tense
+Traceback (most recent call last):
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\tab_theory.py", line 334, in worker
+    doc = self.gemini.generate_theory_doc(cid, context_concepts=[cid])
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\gemini_client.py", line 237, in generate_theory_doc
+    {"zu": "isiZulu example", "en": "English translation", "note": "Why this form is used"}
+ValueError: Invalid format specifier ' "isiZulu example", "en": "English translation", "note": "Why this form is used"' for object of type 'str'
+2025-12-28 21:30:04,251 | ERROR | tab_theory | Theory generation failed. cid=subject_concord_class_1
+Traceback (most recent call last):
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\tab_theory.py", line 334, in worker
+    doc = self.gemini.generate_theory_doc(cid, context_concepts=[cid])
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\gemini_client.py", line 237, in generate_theory_doc
+    {"zu": "isiZulu example", "en": "English translation", "note": "Why this form is used"}
+ValueError: Invalid format specifier ' "isiZulu example", "en": "English translation", "note": "Why this form is used"' for object of type 'str'
+2025-12-28 21:30:04,583 | ERROR | tab_theory | Theory generation failed. cid=se_infix
+Traceback (most recent call last):
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\tab_theory.py", line 334, in worker
+    doc = self.gemini.generate_theory_doc(cid, context_concepts=[cid])
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\gemini_client.py", line 237, in generate_theory_doc
+    {"zu": "isiZulu example", "en": "English translation", "note": "Why this form is used"}
+ValueError: Invalid format specifier ' "isiZulu example", "en": "English translation", "note": "Why this form is used"' for object of type 'str'
+2025-12-28 21:30:04,939 | ERROR | tab_theory | Theory generation failed. cid=locative
+Traceback (most recent call last):
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\tab_theory.py", line 334, in worker
+    doc = self.gemini.generate_theory_doc(cid, context_concepts=[cid])
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\gemini_client.py", line 237, in generate_theory_doc
+    {"zu": "isiZulu example", "en": "English translation", "note": "Why this form is used"}
+ValueError: Invalid format specifier ' "isiZulu example", "en": "English translation", "note": "Why this form is used"' for object of type 'str'
+2025-12-28 21:30:05,280 | ERROR | tab_theory | Theory generation failed. cid=applied_suffix
+Traceback (most recent call last):
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\tab_theory.py", line 334, in worker
+    doc = self.gemini.generate_theory_doc(cid, context_concepts=[cid])
+  File "c:\Users\diond\Desktop\PROJECTS\GITHUBPROJECTS\isizulu_app\gemini_client.py", line 237, in generate_theory_doc
+    {"zu": "isiZulu example", "en": "English translation", "note": "Why this form is used"}
+ValueError: Invalid format specifier ' "isiZulu example", "en": "English translation", "note": "Why this form is used"' for object of type 'str'
+2025-12-28 21:40:54,916 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2025-12-28 21:41:19,941 | INFO | gemini_client | Gemini generate_theory_doc request. cid=past_progressive_tense model=gemini-2.5-flash related=['past_progressive_tense']
+2025-12-28 21:41:19,941 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:41:54,155 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:41:56,418 | INFO | gemini_client | Gemini generate_theory_doc request. cid=subject_concord_class_1 model=gemini-2.5-flash related=['subject_concord_class_1']
+2025-12-28 21:41:56,419 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:42:09,195 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:42:11,450 | INFO | gemini_client | Gemini generate_theory_doc request. cid=se_infix model=gemini-2.5-flash related=['se_infix']
+2025-12-28 21:42:11,451 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:42:25,253 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:42:27,395 | INFO | gemini_client | Gemini generate_theory_doc request. cid=locative model=gemini-2.5-flash related=['locative']
+2025-12-28 21:42:27,395 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:42:51,905 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:42:54,015 | INFO | gemini_client | Gemini generate_theory_doc request. cid=applied_suffix model=gemini-2.5-flash related=['applied_suffix']
+2025-12-28 21:42:54,015 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:43:08,019 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:47:34,299 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2025-12-28 21:53:41,164 | INFO | gemini_client | Gemini generate_theory_doc request. cid=pluperfect_tense model=gemini-2.5-flash related=['pluperfect_tense']
+2025-12-28 21:53:41,165 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:54:17,361 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:54:19,529 | INFO | gemini_client | Gemini generate_theory_doc request. cid=relative_clause model=gemini-2.5-flash related=['relative_clause']
+2025-12-28 21:54:19,530 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:54:34,851 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:54:37,004 | INFO | gemini_client | Gemini generate_theory_doc request. cid=object_concord model=gemini-2.5-flash related=['object_concord']
+2025-12-28 21:54:37,005 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:54:57,571 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:54:59,701 | INFO | gemini_client | Gemini generate_theory_doc request. cid=auxiliary_verbs model=gemini-2.5-flash related=['auxiliary_verbs']
+2025-12-28 21:54:59,701 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:55:24,343 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2025-12-28 21:55:26,673 | INFO | gemini_client | Gemini generate_theory_doc request. cid=negative_form model=gemini-2.5-flash related=['negative_form']
+2025-12-28 21:55:26,673 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2025-12-28 21:55:45,528 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"

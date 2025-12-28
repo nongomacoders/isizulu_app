@@ -11,6 +11,7 @@ class AppConfig:
     firebase_service_account_path: str
     stories_collection: str
     lexicon_collection: str
+    theory_collection: str
 
 def load_config() -> AppConfig:
     gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -27,4 +28,5 @@ def load_config() -> AppConfig:
         firebase_service_account_path=firebase_sa,
         stories_collection=os.getenv("FIRESTORE_DB_COLLECTION_STORIES", "stories").strip(),
         lexicon_collection=os.getenv("FIRESTORE_DB_COLLECTION_LEXICON", "lexicon_words").strip(),
+        theory_collection=os.getenv("FIRESTORE_DB_COLLECTION_THEORY", "theory").strip(),
     )
