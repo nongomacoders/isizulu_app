@@ -31,12 +31,12 @@ def _disable(text: tk.Text):
 
 def configure_markdown_tags(text: tk.Text):
     text.tag_configure("h1", font=("Segoe UI", 14, "bold"), spacing1=6, spacing3=6)
-    text.tag_configure("h2", font=("Segoe UI", 12, "bold"), spacing1=4, spacing3=4)
-    text.tag_configure("bold", font=("Segoe UI", 10, "bold"))
+    text.tag_configure("h2", font=("Segoe UI", 14, "bold"), spacing1=4, spacing3=4)
+    text.tag_configure("bold", font=("Segoe UI", 14, "bold"))
     # Inline `code` appears as monospace but without a border; use bold+italic for emphasis.
-    text.tag_configure("code", font=("Consolas", 10, "bold", "italic"))
+    text.tag_configure("code", font=("Consolas", 14, "bold", "italic"))
     text.tag_configure("bullet", lmargin1=18, lmargin2=36)
-    text.tag_configure("mono", font=("Consolas", 10))
+    text.tag_configure("mono", font=("Consolas", 14))
 
 
 def insert_inline_md(text: tk.Text, s: str):
@@ -100,6 +100,9 @@ class TheoryTab(ttk.Frame):
         self.repo = repo
         self.gemini = gemini
 
+        self._ui_font = ("Segoe UI", 14)
+        self._ui_font_bold = ("Segoe UI", 14, "bold")
+
         self.current_docs: List[Dict[str, Any]] = []
         self.selected_doc: Optional[Dict[str, Any]] = None
 
@@ -113,7 +116,18 @@ class TheoryTab(ttk.Frame):
 
         self._build()
 
+    def _configure_theory_styles(self) -> None:
+        """Local ttk styles for this tab only (avoid changing the whole app)."""
+        style = ttk.Style(self)
+        style.configure("Theory14.TLabel", font=self._ui_font)
+        style.configure("Theory14.Title.TLabel", font=self._ui_font_bold)
+        style.configure("Theory14.TButton", font=self._ui_font)
+        style.configure("Theory14.TEntry", font=self._ui_font)
+        # Listbox/Text are classic Tk widgets and are configured directly.
+
     def _build(self):
+        self._configure_theory_styles()
+
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
@@ -121,28 +135,28 @@ class TheoryTab(ttk.Frame):
         top.grid(row=0, column=0, sticky="we", padx=10, pady=10)
         top.columnconfigure(1, weight=1)
 
-        ttk.Label(top, text="Search / Concept").grid(row=0, column=0, sticky="w")
+        ttk.Label(top, text="Search / Concept", style="Theory14.TLabel").grid(row=0, column=0, sticky="w")
 
         self.query_var = tk.StringVar(value="")
-        self.query_entry = ttk.Entry(top, textvariable=self.query_var)
+        self.query_entry = ttk.Entry(top, textvariable=self.query_var, style="Theory14.TEntry")
         self.query_entry.grid(row=0, column=1, sticky="we", padx=(8, 8))
         self.query_entry.bind("<Return>", lambda e: self._search())
 
-        ttk.Button(top, text="Search", command=self._search).grid(row=0, column=2, sticky="e")
+        ttk.Button(top, text="Search", command=self._search, style="Theory14.TButton").grid(row=0, column=2, sticky="e")
 
-        ttk.Button(top, text="Show all theory", command=self._show_all).grid(
+        ttk.Button(top, text="Show all theory", command=self._show_all, style="Theory14.TButton").grid(
             row=0, column=3, sticky="e", padx=(8, 0)
         )
 
-        self.create_btn = ttk.Button(top, text="Generate with Gemini", command=self._generate_missing)
+        self.create_btn = ttk.Button(top, text="Generate with Gemini", command=self._generate_missing, style="Theory14.TButton")
         self.create_btn.grid(row=0, column=4, sticky="e", padx=(8, 0))
         self.create_btn.configure(state="disabled")
 
-        self.generate_all_btn = ttk.Button(top, text="Generate all missing", command=self._generate_all_missing)
+        self.generate_all_btn = ttk.Button(top, text="Generate all missing", command=self._generate_all_missing, style="Theory14.TButton")
         self.generate_all_btn.grid(row=0, column=5, sticky="e", padx=(8, 0))
         self.generate_all_btn.configure(state="disabled")
 
-        ttk.Button(top, text="Clear", command=self._clear).grid(row=0, column=6, sticky="e", padx=(8, 0))
+        ttk.Button(top, text="Clear", command=self._clear, style="Theory14.TButton").grid(row=0, column=6, sticky="e", padx=(8, 0))
 
         main = ttk.Frame(self)
         main.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -155,9 +169,9 @@ class TheoryTab(ttk.Frame):
         left.columnconfigure(0, weight=1)
         left.rowconfigure(1, weight=1)
 
-        ttk.Label(left, text="Theory topics").grid(row=0, column=0, sticky="w")
+        ttk.Label(left, text="Theory topics", style="Theory14.TLabel").grid(row=0, column=0, sticky="w")
 
-        self.listbox = tk.Listbox(left, height=12)
+        self.listbox = tk.Listbox(left, height=12, font=self._ui_font)
         self.listbox.grid(row=1, column=0, sticky="nsew")
         self.listbox.bind("<<ListboxSelect>>", lambda e: self._select())
 
@@ -166,10 +180,10 @@ class TheoryTab(ttk.Frame):
         right.columnconfigure(0, weight=1)
         right.rowconfigure(1, weight=1)
 
-        self.title_lbl = ttk.Label(right, text="(select a topic)", font=("Segoe UI", 11, "bold"))
+        self.title_lbl = ttk.Label(right, text="(select a topic)", style="Theory14.Title.TLabel")
         self.title_lbl.grid(row=0, column=0, sticky="w")
 
-        self.text = tk.Text(right, wrap="word", state="disabled")
+        self.text = tk.Text(right, wrap="word", state="disabled", font=self._ui_font)
         self.text.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
         configure_markdown_tags(self.text)
 
