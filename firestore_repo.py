@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import hashlib
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -23,6 +24,7 @@ class FirestoreRepo:
         stories_collection: str,
         lexicon_collection: str,
         theory_collection: str,
+        sentence_analysis_collection: str,
     ):
         if not firebase_admin._apps:
             cred = credentials.Certificate(service_account_path)
@@ -32,6 +34,7 @@ class FirestoreRepo:
         self.stories_collection = stories_collection
         self.lexicon_collection = lexicon_collection
         self.theory_collection = theory_collection
+        self.sentence_analysis_collection = sentence_analysis_collection
 
         # Catalog location
         self._meta_collection = "meta"
@@ -387,3 +390,31 @@ class FirestoreRepo:
             d.setdefault("conceptId", snap.id)
             out.append(d)
         return out
+
+    # -----------------------------
+    # SENTENCE ANALYSIS CACHE
+    # -----------------------------
+
+    def _sentence_hash(self, text: str) -> str:
+        """Helper to create a stable document ID for a sentence."""
+        return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+    def get_sentence_analysis(self, sentence_zu: str) -> Optional[str]:
+        """Returns cached analysis from Firestore if it exists and is valid."""
+        sid = self._sentence_hash(sentence_zu)
+        ref = self.db.collection(self.sentence_analysis_collection).document(sid).get()
+        if ref.exists:
+            analysis = ref.to_dict().get("analysis")
+            if analysis == "Failed to get detailed analysis from Gemini.":
+                return None
+            return analysis
+        return None
+
+    def save_sentence_analysis(self, sentence_zu: str, analysis: str) -> None:
+        """Saves analysis to Firestore for future reuse."""
+        sid = self._sentence_hash(sentence_zu)
+        self.db.collection(self.sentence_analysis_collection).document(sid).set({
+            "sentence": sentence_zu.strip(),
+            "analysis": analysis,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        })

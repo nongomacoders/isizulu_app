@@ -2,7 +2,9 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import threading
 from typing import List, Dict, Any, Optional
+from utils.gui_utils import configure_markdown_tags, render_markdown
 
 from utils_text import tokenize_zu
 from services.lexicon_service import normalize_word_id
@@ -11,9 +13,10 @@ from rules.auxiliary_explain import explain_auxiliary
 
 
 class LearnTab(ttk.Frame):
-    def __init__(self, parent, repo):
+    def __init__(self, parent, repo, gemini=None):
         super().__init__(parent)
         self.repo = repo
+        self.gemini = gemini
 
         self.stories: List[Dict[str, Any]] = []
         self.sentences: List[Dict[str, Any]] = []
@@ -70,6 +73,9 @@ class LearnTab(ttk.Frame):
         self.theory_btn = ttk.Button(nav, text="Theory", command=self._open_theory_for_sentence)
         self.theory_btn.grid(row=0, column=6, sticky="e", padx=(8, 0))
 
+        self.ai_btn = ttk.Button(nav, text="Sentence AI", command=self._open_sentence_ai)
+        self.ai_btn.grid(row=0, column=7, sticky="e", padx=(8, 0))
+
         main = ttk.Frame(self)
         main.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         main.columnconfigure(0, weight=2)
@@ -115,6 +121,50 @@ class LearnTab(ttk.Frame):
     def set_theory_tab(self, theory_tab, notebook):
         self._theory_tab = theory_tab
         self._notebook = notebook
+
+    def _open_sentence_ai(self):
+        if not self.sentences:
+            return
+        if not self.gemini:
+            messagebox.showerror("Error", "Gemini client not connected.")
+            return
+
+        s = self.sentences[self.idx]
+        zu = (s.get("text_zu") or "").strip()
+        if not zu:
+            return
+
+        # Show a simple loading state or just launch
+        
+        def _fetch(win_to_update, force=False):
+            try:
+                if not force:
+                    # 1) Check Firestore Cache first
+                    cached = self.repo.get_sentence_analysis(zu)
+                    if cached:
+                        self.after(0, lambda: win_to_update.set_analysis(cached))
+                        return
+                else:
+                    self.after(0, lambda: win_to_update.reset_loading())
+
+                # 2) If not cached or forced, call Gemini
+                analysis = self.gemini.analyze_sentence_detailed(zu)
+                
+                # 3) Save to cache
+                self.repo.save_sentence_analysis(zu, analysis)
+                
+                self.after(0, lambda: win_to_update.set_analysis(analysis))
+            except Exception as e:
+                self.after(0, lambda: win_to_update.set_analysis(f"Error: {e}"))
+
+        # Create window with re-analyze callback
+        win = SentenceAIWindow(
+            self, 
+            zu, 
+            on_reanalyze=lambda: threading.Thread(target=_fetch, args=(win, True), daemon=True).start()
+        )
+        
+        threading.Thread(target=_fetch, args=(win,), daemon=True).start()
 
     def _refresh_stories(self):
         try:
@@ -363,3 +413,76 @@ class LearnTab(ttk.Frame):
         widget.delete("1.0", "end")
         widget.insert("1.0", text or "")
         widget.configure(state="disabled")
+
+
+class SentenceAIWindow(tk.Toplevel):
+    def __init__(self, parent, sentence_zu: str, on_reanalyze=None):
+        super().__init__(parent)
+        self.title("Sentence AI Analysis")
+        
+        # Use a large window but not absolute full screen to avoid taskbar overlap
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        # Set to approx 90% of screen size, centered
+        w = int(sw * 0.9)
+        h = int(sh * 0.85)
+        x = (sw - w) // 2
+        y = (sh - h) // 2 - 30 # Offset slightly up
+        self.geometry(f"{w}x{h}+{x}+{y}")
+            
+        self.transient(parent)
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
+
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="we", padx=20, pady=20)
+        
+        ttk.Label(header, text="isiZulu Sentence:", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        # Larger font for the isiZulu sentence
+        lbl = ttk.Label(header, text=sentence_zu, wraplength=1000, font=("Segoe UI", 16))
+        lbl.pack(anchor="w", pady=(5, 10))
+
+        ttk.Separator(self, orient="horizontal").grid(row=1, column=0, sticky="we")
+
+        # Container for text and scrollbar
+        container = ttk.Frame(self)
+        container.grid(row=2, column=0, sticky="nsew", padx=20, pady=20)
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        self.txt = tk.Text(container, wrap="word", padx=20, pady=20, state="disabled", font=("Segoe UI", 14))
+        self.txt.grid(row=0, column=0, sticky="nsew")
+        
+        sb = ttk.Scrollbar(container, orient="vertical", command=self.txt.yview)
+        sb.grid(row=0, column=1, sticky="ns")
+        self.txt.configure(yscrollcommand=sb.set)
+
+        configure_markdown_tags(self.txt)
+        
+        self.txt.configure(state="normal")
+        self.txt.insert("end", "Consulting Gemini 3 Flash Preview for detailed analysis...\n\nPlease wait.")
+        self.txt.configure(state="disabled")
+        self.loading_text = "Consulting Gemini 3 Flash Preview for detailed analysis...\n\nPlease wait."
+
+        btn_frame = ttk.Frame(self)
+        btn_frame.grid(row=3, column=0, sticky="e", padx=20, pady=(0, 20))
+        
+        if on_reanalyze:
+            self.btn_reanalyze = ttk.Button(btn_frame, text="Re-analyze (Bypass Cache)", command=on_reanalyze)
+            self.btn_reanalyze.pack(side="left", padx=5)
+            
+        ttk.Button(btn_frame, text="Close", command=self.destroy).pack(side="left")
+
+    def reset_loading(self):
+        self.txt.configure(state="normal")
+        self.txt.delete("1.0", "end")
+        self.txt.insert("end", self.loading_text)
+        self.txt.configure(state="disabled")
+        if hasattr(self, "btn_reanalyze"):
+            self.btn_reanalyze.configure(state="disabled")
+
+    def set_analysis(self, text: str):
+        render_markdown(self.txt, text)
+        if hasattr(self, "btn_reanalyze"):
+            self.btn_reanalyze.configure(state="normal")

@@ -325,3 +325,34 @@ IMPORTANT:
             "level": (data.get("level") or "Beginner").strip(),
         }
         return out
+
+    # -----------------------------
+    # Deep Analysis: Morphological breakdown + Cultural Context
+    # -----------------------------
+    def analyze_sentence_detailed(self, sentence_zu: str) -> str:
+        prompt = f"""{SYSTEM_STYLE}
+
+TASK: Provide a deep linguistic and cultural analysis of this isiZulu sentence.
+
+SENTENCE:
+{sentence_zu}
+
+STRUCTURE YOUR RESPONSE IN MARKDOWN:
+1. **Natural Translation**: A smooth, contextual English translation.
+2. **Literal Translation**: A word-for-word translation to show structure.
+3. **Morphological Breakdown**: Provide a breakdown for **EVERY SINGLE WORD** in the sentence.
+   - List each word as a main bullet point (e.g., `- **Word**`).
+   - Use indented sub-bullets for each component (prefixes, roots, suffixes), explaining their function (e.g., `  - **wa-**: Subject concord`).
+   - Do not skip any words from the original sentence.
+4. **Grammar & Syntax**: Explain the key grammatical choices (e.g., mood, aspect, rare prefixes).
+5. **Cultural/Contextual Nuance**: Explain any idioms, social implications, or cultural context if applicable.
+
+Guidelines:
+- Use bold for isiZulu terms.
+- Use nested lists for morphological breakdowns (indented sub-bullets for components).
+- **Ensure EVERY word from the original sentence is listed in the breakdown section.**
+- Be concise but thorough.
+"""
+        logger.info("Gemini analyze_sentence_detailed request. model=%s sentence=%r", self.model, _truncate(sentence_zu, 100))
+        resp = self.client.models.generate_content(model=self.model, contents=prompt)
+        return (getattr(resp, "text", "") or "").strip()

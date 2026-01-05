@@ -19,7 +19,7 @@ class MainGUI(tk.Tk):
 
         # Create tabs (ONLY ONCE each)
         self.create_tab = CreateTab(self.notebook, service=service)
-        self.learn_tab = LearnTab(self.notebook, repo=repo)
+        self.learn_tab = LearnTab(self.notebook, repo=repo, gemini=service.gemini)
         self.theory_tab = TheoryTab(self.notebook, repo=repo, gemini=service.gemini)
 
         # Add tabs

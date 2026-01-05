@@ -6,6 +6,7 @@ import re
 import time
 import threading
 import logging
+from utils.gui_utils import configure_markdown_tags, render_markdown
 logger = logging.getLogger(__name__)
 
 
@@ -16,82 +17,7 @@ def normalize_concept_id(s: str) -> str:
     return s.strip("_")
 
 
-MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
-MD_CODE_RE = re.compile(r"`([^`]+)`")
-
-
-def _clear_and_enable(text: tk.Text):
-    text.configure(state="normal")
-    text.delete("1.0", "end")
-
-
-def _disable(text: tk.Text):
-    text.configure(state="disabled")
-
-
-def configure_markdown_tags(text: tk.Text):
-    text.tag_configure("h1", font=("Segoe UI", 14, "bold"), spacing1=6, spacing3=6)
-    text.tag_configure("h2", font=("Segoe UI", 14, "bold"), spacing1=4, spacing3=4)
-    text.tag_configure("bold", font=("Segoe UI", 14, "bold"))
-    # Inline `code` appears as monospace but without a border; use bold+italic for emphasis.
-    text.tag_configure("code", font=("Consolas", 14, "bold", "italic"))
-    text.tag_configure("bullet", lmargin1=18, lmargin2=36)
-    text.tag_configure("mono", font=("Consolas", 14))
-
-
-def insert_inline_md(text: tk.Text, s: str):
-    i = 0
-    while i < len(s):
-        bold_m = MD_BOLD_RE.search(s, i)
-        code_m = MD_CODE_RE.search(s, i)
-
-        candidates = [m for m in [bold_m, code_m] if m is not None]
-        if not candidates:
-            text.insert("end", s[i:])
-            return
-
-        m = min(candidates, key=lambda m: m.start())
-        if m.start() > i:
-            text.insert("end", s[i:m.start()])
-
-        if m.re is MD_BOLD_RE:
-            text.insert("end", m.group(1), ("bold",))
-        else:
-            text.insert("end", m.group(1), ("code",))
-
-        i = m.end()
-
-
-def render_markdown(text: tk.Text, md: str):
-    _clear_and_enable(text)
-
-    lines = (md or "").splitlines()
-    for raw in lines:
-        line = raw.rstrip("\n")
-
-        if not line.strip():
-            text.insert("end", "\n")
-            continue
-
-        if line.startswith("## "):
-            text.insert("end", line[3:].strip() + "\n", ("h2",))
-            continue
-
-        if line.startswith("# "):
-            text.insert("end", line[2:].strip() + "\n", ("h1",))
-            continue
-
-        if line.lstrip().startswith("- "):
-            content = line.lstrip()[2:].strip()
-            text.insert("end", "• ", ("bullet",))
-            insert_inline_md(text, content)
-            text.insert("end", "\n", ("bullet",))
-            continue
-
-        insert_inline_md(text, line)
-        text.insert("end", "\n")
-
-    _disable(text)
+# Removed internal markdown rendering functions (now in gui_utils.py)
 
 
 class TheoryTab(ttk.Frame):

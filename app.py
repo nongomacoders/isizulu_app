@@ -33,6 +33,7 @@ def main():
         stories_collection=cfg.stories_collection,
         lexicon_collection=cfg.lexicon_collection,
         theory_collection=cfg.theory_collection,
+        sentence_analysis_collection=cfg.sentence_analysis_collection,
     )
     service = StoryService(gemini=gemini, repo=repo)
 

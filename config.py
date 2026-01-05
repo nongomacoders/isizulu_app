@@ -12,6 +12,7 @@ class AppConfig:
     stories_collection: str
     lexicon_collection: str
     theory_collection: str
+    sentence_analysis_collection: str
 
 def load_config() -> AppConfig:
     gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -24,9 +25,10 @@ def load_config() -> AppConfig:
 
     return AppConfig(
         gemini_api_key=gemini_api_key,
-        gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip(),
+        gemini_model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview").strip(),
         firebase_service_account_path=firebase_sa,
         stories_collection=os.getenv("FIRESTORE_DB_COLLECTION_STORIES", "stories").strip(),
         lexicon_collection=os.getenv("FIRESTORE_DB_COLLECTION_LEXICON", "lexicon_words").strip(),
         theory_collection=os.getenv("FIRESTORE_DB_COLLECTION_THEORY", "theory").strip(),
+        sentence_analysis_collection=os.getenv("FIRESTORE_DB_COLLECTION_SENTENCE_ANALYSIS", "sentence_analysis").strip(),
     )
