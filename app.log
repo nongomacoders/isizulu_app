@@ -31,3 +31,13 @@
 2026-01-05 14:32:26,185 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
 2026-01-05 14:32:40,587 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
 2026-01-05 14:38:38,359 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-01-05 15:46:28,795 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-01-05 15:47:43,402 | INFO | gemini_client | Gemini analyze_sentence_detailed request. model=gemini-3-flash-preview sentence='“Angeke ngiwudlale lo mculo werephu ahlale ekhononda ngawo,” kwasho uRefilwe.'
+2026-01-05 15:47:43,403 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2026-01-05 15:47:57,170 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-01-05 15:51:11,321 | INFO | gemini_client | Gemini analyze_sentence_detailed request. model=gemini-3-flash-preview sentence='Uzoba ngendlela nje ethandwa nguMama.” Wayesekhipha izibuko zakhe zelanga qede wacifela uThapelo iso... [truncated 1 chars]'
+2026-01-05 15:51:11,321 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2026-01-05 15:51:28,988 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-01-05 15:54:22,606 | INFO | gemini_client | Gemini analyze_sentence_detailed request. model=gemini-3-flash-preview sentence='“Mhlawumbe wena ungadansa noMama.” Emva kwalokho uRefilwe wabe esefaka izilalelisi zakhe ezindlebeni... [truncated 51 chars]'
+2026-01-05 15:54:22,607 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
+2026-01-05 15:54:36,042 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
