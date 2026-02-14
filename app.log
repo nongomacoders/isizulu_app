@@ -41,3 +41,6 @@
 2026-01-05 15:54:22,606 | INFO | gemini_client | Gemini analyze_sentence_detailed request. model=gemini-3-flash-preview sentence='“Mhlawumbe wena ungadansa noMama.” Emva kwalokho uRefilwe wabe esefaka izilalelisi zakhe ezindlebeni... [truncated 51 chars]'
 2026-01-05 15:54:22,607 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
 2026-01-05 15:54:36,042 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-02-10 09:58:23,344 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-02-10 10:13:41,887 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-02-10 18:39:46,805 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.

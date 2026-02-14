@@ -1,7 +1,11 @@
 from typing import List, Dict, Any, Optional
 import hashlib
+from datetime import datetime, timezone
+
 import firebase_admin
 from firebase_admin import credentials, firestore
+
+from google.api_core.exceptions import NotFound
 
 
 class FirestoreRepo:
@@ -45,13 +49,78 @@ class FirestoreRepo:
     # -----------------------------
 
     def update_word_learning(self, word_id: str, learning_patch: dict) -> None:
-        self.db.collection(self.lexicon_collection).document(word_id).set(
-            {
-                "learning": learning_patch,
-                "updatedAt": firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
+        """Updates selected fields inside `learning` without overwriting the whole map.
+
+        NOTE: The previous implementation used `set({'learning': patch}, merge=True)` which
+        replaces the entire `learning` object. That breaks spaced repetition fields.
+        """
+        if not isinstance(learning_patch, dict) or not learning_patch:
+            return
+
+        ref = self.db.collection(self.lexicon_collection).document(word_id)
+        payload: Dict[str, Any] = {f"learning.{k}": v for k, v in learning_patch.items()}
+        payload["updatedAt"] = firestore.SERVER_TIMESTAMP
+
+        try:
+            ref.update(payload)
+        except NotFound:
+            # If the doc doesn't exist yet, fall back to creating it.
+            ref.set(
+                {
+                    "learning": learning_patch,
+                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                    "createdAt": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+
+    # -----------------------------
+    # REVISION / ACTIVE RECALL
+    # -----------------------------
+
+    def list_due_words(self, limit: int = 25, scan_limit: int = 250) -> List[Dict[str, Any]]:
+        """Returns lexicon words that are due for review.
+
+        This intentionally uses a bounded scan to avoid requiring Firestore composite indexes.
+        A word is considered due if:
+          - learning.known == True AND
+          - learning.nextReviewAt is missing/None OR <= now
+        """
+        limit = max(1, int(limit))
+        scan_limit = max(limit, int(scan_limit))
+
+        now = datetime.now(timezone.utc)
+        qs = (
+            self.db.collection(self.lexicon_collection)
+            .where("learning.known", "==", True)
+            .limit(scan_limit)
+            .stream()
         )
+
+        due: List[Dict[str, Any]] = []
+        for snap in qs:
+            if not snap.exists:
+                continue
+            d = snap.to_dict() or {}
+            learning = d.get("learning") or {}
+            if not isinstance(learning, dict):
+                learning = {}
+
+            next_at = learning.get("nextReviewAt")
+            is_due = (next_at is None) or (next_at <= now)
+            if not is_due:
+                continue
+
+            d["id"] = snap.id
+            due.append(d)
+
+        def _sort_key(item: Dict[str, Any]):
+            lr = (item.get("learning") or {})
+            nxt = lr.get("nextReviewAt")
+            return (nxt is not None, nxt or now)
+
+        due.sort(key=_sort_key)
+        return due[:limit]
 
     def create_story(self, title: str, level: str, language: str, sentence_count: int) -> str:
         doc_ref = self.db.collection(self.stories_collection).document()
@@ -80,6 +149,83 @@ class FirestoreRepo:
             )
             batch.set(ref, data, merge=True)
         batch.commit()
+
+    def update_sentence_learning(self, story_id: str, sentence_id: str, learning_patch: dict) -> None:
+        """Updates selected fields inside a sentence's `learning` map."""
+        if not story_id or not sentence_id:
+            return
+        if not isinstance(learning_patch, dict) or not learning_patch:
+            return
+
+        ref = (
+            self.db.collection(self.stories_collection)
+            .document(story_id)
+            .collection("sentences")
+            .document(sentence_id)
+        )
+
+        payload: Dict[str, Any] = {f"learning.{k}": v for k, v in learning_patch.items()}
+        payload["updatedAt"] = firestore.SERVER_TIMESTAMP
+
+        try:
+            ref.update(payload)
+        except NotFound:
+            ref.set(
+                {
+                    "learning": learning_patch,
+                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+
+    def list_due_sentences(self, story_id: str, limit: int = 10, scan_limit: int = 250) -> List[Dict[str, Any]]:
+        """Returns sentences due for review for a specific story.
+
+        A sentence is due if learning.known == True and nextReviewAt is missing/None or <= now.
+        Uses a bounded scan to avoid index requirements.
+        """
+        if not story_id:
+            return []
+
+        limit = max(1, int(limit))
+        scan_limit = max(limit, int(scan_limit))
+
+        now = datetime.now(timezone.utc)
+        qs = (
+            self.db.collection(self.stories_collection)
+            .document(story_id)
+            .collection("sentences")
+            .order_by("index")
+            .limit(scan_limit)
+            .stream()
+        )
+
+        due: List[Dict[str, Any]] = []
+        for snap in qs:
+            if not snap.exists:
+                continue
+            d = snap.to_dict() or {}
+            learning = d.get("learning") or {}
+            if not isinstance(learning, dict):
+                learning = {}
+
+            if learning.get("known") is not True:
+                continue
+            next_at = learning.get("nextReviewAt")
+            is_due = (next_at is None) or (next_at <= now)
+            if not is_due:
+                continue
+
+            d["id"] = snap.id
+            due.append(d)
+
+        def _sort_key(item: Dict[str, Any]):
+            lr = (item.get("learning") or {})
+            nxt = lr.get("nextReviewAt")
+            return (nxt is not None, nxt or now)
+
+        due.sort(key=_sort_key)
+        return due[:limit]
 
     def upsert_lexicon_words_batch(self, word_entries: List[Dict[str, Any]]) -> None:
         if not word_entries:

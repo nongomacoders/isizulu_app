@@ -5,11 +5,13 @@ from tkinter import ttk, messagebox
 import threading
 from typing import List, Dict, Any, Optional
 from utils.gui_utils import configure_markdown_tags, render_markdown
+from datetime import datetime, timezone
 
 from utils_text import tokenize_zu
 from services.lexicon_service import normalize_word_id
 from utils.morphology_zu import breakdown_verb_token, format_breakdown
 from rules.auxiliary_explain import explain_auxiliary
+from utils.revision import sm2_update
 
 
 class LearnTab(ttk.Frame):
@@ -70,11 +72,17 @@ class LearnTab(ttk.Frame):
         self.understood_btn = ttk.Button(nav, text="Understood", command=self._mark_sentence_understood)
         self.understood_btn.grid(row=0, column=5, sticky="e", padx=(8, 0))
 
+        self.revision_btn = ttk.Button(nav, text="Revision", command=self._open_revision)
+        self.revision_btn.grid(row=0, column=6, sticky="e", padx=(8, 0))
+
+        self.sent_revision_btn = ttk.Button(nav, text="Sentence Revision", command=self._open_sentence_revision)
+        self.sent_revision_btn.grid(row=0, column=7, sticky="e", padx=(8, 0))
+
         self.theory_btn = ttk.Button(nav, text="Theory", command=self._open_theory_for_sentence)
-        self.theory_btn.grid(row=0, column=6, sticky="e", padx=(8, 0))
+        self.theory_btn.grid(row=0, column=8, sticky="e", padx=(8, 0))
 
         self.ai_btn = ttk.Button(nav, text="Sentence AI", command=self._open_sentence_ai)
-        self.ai_btn.grid(row=0, column=7, sticky="e", padx=(8, 0))
+        self.ai_btn.grid(row=0, column=9, sticky="e", padx=(8, 0))
 
         main = ttk.Frame(self)
         main.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
@@ -271,12 +279,36 @@ class LearnTab(ttk.Frame):
             return
         word_ids = sorted({normalize_word_id(t) for t in toks})
         try:
+            now = datetime.now(timezone.utc)
+
+            # 1) Mark the sentence itself as reviewable (spaced repetition)
+            if self.story_id:
+                s = self.sentences[self.idx]
+                sid = (s.get("id") or "").strip()
+                if sid:
+                    self.repo.update_sentence_learning(
+                        self.story_id,
+                        sid,
+                        {"known": True, "nextReviewAt": now},
+                    )
+
+            # 2) Mark words as known and due now
             for wid in word_ids:
-                self.repo.update_word_learning(wid, {"known": True})
+                # Mark known AND ensure it becomes reviewable in Revision.
+                self.repo.update_word_learning(wid, {"known": True, "nextReviewAt": now})
         except Exception as e:
             messagebox.showerror("Error", f"Failed to mark words as known:\n{e}")
             return
         messagebox.showinfo("Saved", f"Marked {len(word_ids)} word(s) as known.")
+
+    def _open_revision(self):
+        WordRevisionWindow(self, repo=self.repo)
+
+    def _open_sentence_revision(self):
+        if not self.story_id:
+            messagebox.showinfo("Sentence Revision", "Pick a story first.")
+            return
+        SentenceRevisionWindow(self, repo=self.repo, story_id=self.story_id)
 
     def _render(self):
         total = len(self.sentences)
@@ -486,3 +518,455 @@ class SentenceAIWindow(tk.Toplevel):
         render_markdown(self.txt, text)
         if hasattr(self, "btn_reanalyze"):
             self.btn_reanalyze.configure(state="normal")
+
+
+class WordRevisionWindow(tk.Toplevel):
+    def __init__(self, parent, repo):
+        super().__init__(parent)
+        self.title("Revision (Words)")
+        self.repo = repo
+
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        w = min(900, int(sw * 0.8))
+        h = min(650, int(sh * 0.75))
+        x = (sw - w) // 2
+        y = (sh - h) // 2 - 30
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.transient(parent)
+
+        self._cards: List[Dict[str, Any]] = []
+        self._idx = 0
+        self._revealed = False
+        self._reviewed = 0
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
+
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="we", padx=12, pady=12)
+        header.columnconfigure(1, weight=1)
+
+        ttk.Label(header, text="Word revision (active recall)").grid(row=0, column=0, sticky="w")
+        self.stats_lbl = ttk.Label(header, text="Loading…")
+        self.stats_lbl.grid(row=0, column=1, sticky="e")
+
+        ttk.Separator(self, orient="horizontal").grid(row=1, column=0, sticky="we")
+
+        body = ttk.Frame(self)
+        body.grid(row=2, column=0, sticky="nsew", padx=12, pady=12)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(2, weight=1)
+
+        self.prompt_lbl = ttk.Label(body, text="", font=("Segoe UI", 18, "bold"), wraplength=w - 60)
+        self.prompt_lbl.grid(row=0, column=0, sticky="w", pady=(0, 10))
+
+        self.front_lbl = ttk.Label(body, text="Recall the meaning (then reveal).", wraplength=w - 60)
+        self.front_lbl.grid(row=1, column=0, sticky="w", pady=(0, 10))
+
+        self.answer_txt = tk.Text(body, wrap="word", state="disabled")
+        self.answer_txt.grid(row=2, column=0, sticky="nsew")
+
+        btns = ttk.Frame(self)
+        btns.grid(row=3, column=0, sticky="we", padx=12, pady=(0, 12))
+
+        self.btn_show = ttk.Button(btns, text="Show answer", command=self._reveal)
+        self.btn_show.pack(side="left")
+
+        self.btn_again = ttk.Button(btns, text="Again", command=lambda: self._grade("again"), state="disabled")
+        self.btn_hard = ttk.Button(btns, text="Hard", command=lambda: self._grade("hard"), state="disabled")
+        self.btn_good = ttk.Button(btns, text="Good", command=lambda: self._grade("good"), state="disabled")
+        self.btn_easy = ttk.Button(btns, text="Easy", command=lambda: self._grade("easy"), state="disabled")
+
+        for b in [self.btn_again, self.btn_hard, self.btn_good, self.btn_easy]:
+            b.pack(side="left", padx=(8, 0))
+
+        ttk.Separator(btns, orient="vertical").pack(side="left", fill="y", padx=12)
+        ttk.Button(btns, text="Skip", command=self._skip).pack(side="left")
+        ttk.Button(btns, text="Refresh", command=self._refresh).pack(side="left", padx=(8, 0))
+        ttk.Button(btns, text="Close", command=self.destroy).pack(side="right")
+
+        self._refresh()
+
+    def _set_answer(self, text: str):
+        self.answer_txt.configure(state="normal")
+        self.answer_txt.delete("1.0", "end")
+        self.answer_txt.insert("1.0", text or "")
+        self.answer_txt.configure(state="disabled")
+
+    def _refresh(self):
+        self._set_answer("")
+        self.prompt_lbl.configure(text="Loading…")
+        self.front_lbl.configure(text="")
+        self._disable_grades()
+        self._revealed = False
+        self._idx = 0
+
+        def _fetch():
+            try:
+                cards = self.repo.list_due_words(limit=25)
+            except Exception as e:
+                cards = []
+                err = str(e)
+                self.after(0, lambda: messagebox.showerror("Revision", f"Failed to load due words:\n{err}"))
+            self.after(0, lambda: self._set_cards(cards))
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _set_cards(self, cards: List[Dict[str, Any]]):
+        self._cards = cards or []
+        self._revealed = False
+        self._idx = 0
+        self._render()
+
+    def _disable_grades(self):
+        for b in [self.btn_again, self.btn_hard, self.btn_good, self.btn_easy]:
+            b.configure(state="disabled")
+
+    def _enable_grades(self):
+        for b in [self.btn_again, self.btn_hard, self.btn_good, self.btn_easy]:
+            b.configure(state="normal")
+
+    def _current_card(self) -> Optional[Dict[str, Any]]:
+        if not self._cards:
+            return None
+        self._idx = max(0, min(self._idx, len(self._cards) - 1))
+        return self._cards[self._idx]
+
+    def _display_token(self, w: Dict[str, Any]) -> str:
+        sf = w.get("surfaceForms") or []
+        if isinstance(sf, list) and sf:
+            t = str(sf[0]).strip()
+            if t:
+                return t
+        wid = (w.get("id") or "").strip()
+        return wid.replace("zu_", "") if wid else "(unknown)"
+
+    def _render(self):
+        total = len(self._cards)
+        if total == 0:
+            self.stats_lbl.configure(text=f"Due: 0 | Reviewed: {self._reviewed}")
+            self.prompt_lbl.configure(text="No due words right now.")
+            self.front_lbl.configure(text="Tip: click 'Understood' on a sentence to add its words to revision.")
+            self._set_answer("")
+            self.btn_show.configure(state="disabled")
+            self._disable_grades()
+            return
+
+        self.btn_show.configure(state="normal")
+        self.stats_lbl.configure(text=f"Due: {total} | Reviewed: {self._reviewed} | {self._idx + 1}/{total}")
+
+        w = self._current_card() or {}
+        token = self._display_token(w)
+        self.prompt_lbl.configure(text=token)
+        self.front_lbl.configure(text="Recall the meaning. Then click 'Show answer'.")
+
+        if not self._revealed:
+            self._set_answer("")
+            self._disable_grades()
+        else:
+            self._set_answer(self._format_answer(w))
+            self._enable_grades()
+
+    def _format_answer(self, w: Dict[str, Any]) -> str:
+        lines = []
+        mp = (w.get("meaning_primary_en") or "").strip()
+        if mp:
+            lines.append(f"Meaning: {mp}")
+
+        lemma = (w.get("lemma") or "").strip()
+        if lemma:
+            lines.append(f"Lemma: {lemma}")
+
+        pos = (w.get("pos") or "").strip()
+        if pos:
+            lines.append(f"POS: {pos}")
+
+        if (w.get("nounClass") or "").strip():
+            lines.append(f"Noun class: {w.get('nounClass')}")
+
+        if (w.get("infinitive") or "").strip():
+            lines.append(f"Infinitive: {w.get('infinitive')}")
+
+        notes = (w.get("analysisNotes") or "").strip()
+        if notes:
+            lines.append("")
+            lines.append(f"Notes: {notes}")
+
+        learning = w.get("learning") or {}
+        if isinstance(learning, dict):
+            ease = learning.get("ease")
+            interval = learning.get("intervalDays")
+            reps = learning.get("repetitions")
+            nxt = learning.get("nextReviewAt")
+            parts = []
+            if ease is not None:
+                parts.append(f"ease={ease}")
+            if interval is not None:
+                parts.append(f"intervalDays={interval}")
+            if reps is not None:
+                parts.append(f"repetitions={reps}")
+            if nxt is not None:
+                parts.append(f"nextReviewAt={nxt}")
+            if parts:
+                lines.append("")
+                lines.append("Schedule: " + ", ".join(parts))
+
+        return "\n".join(lines).strip() or "(No answer data available for this word.)"
+
+    def _reveal(self):
+        if not self._cards:
+            return
+        self._revealed = True
+        self._render()
+
+    def _skip(self):
+        if not self._cards:
+            return
+        self._revealed = False
+        self._idx = (self._idx + 1) % len(self._cards)
+        self._render()
+
+    def _grade(self, rating: str):
+        w = self._current_card()
+        if not w:
+            return
+        wid = (w.get("id") or "").strip()
+        if not wid:
+            return
+
+        patch = sm2_update(w.get("learning") or {}, rating, now=datetime.now(timezone.utc))
+
+        def _save():
+            try:
+                self.repo.update_word_learning(wid, patch)
+            except Exception as e:
+                err = str(e)
+                self.after(0, lambda: messagebox.showerror("Revision", f"Failed to save review:\n{err}"))
+                return
+
+            def _advance():
+                self._reviewed += 1
+                if self._cards:
+                    self._cards.pop(self._idx)
+                self._revealed = False
+                if self._idx >= len(self._cards):
+                    self._idx = 0
+                self._render()
+
+            self.after(0, _advance)
+
+        threading.Thread(target=_save, daemon=True).start()
+
+
+class SentenceRevisionWindow(tk.Toplevel):
+    def __init__(self, parent, repo, story_id: str):
+        super().__init__(parent)
+        self.title("Revision (Sentences)")
+        self.repo = repo
+        self.story_id = story_id
+
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        w = min(1000, int(sw * 0.85))
+        h = min(720, int(sh * 0.80))
+        x = (sw - w) // 2
+        y = (sh - h) // 2 - 30
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.transient(parent)
+
+        self._cards: List[Dict[str, Any]] = []
+        self._idx = 0
+        self._revealed = False
+        self._reviewed = 0
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
+
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="we", padx=12, pady=12)
+        header.columnconfigure(1, weight=1)
+
+        ttk.Label(header, text="Sentence revision (English → isiZulu)").grid(row=0, column=0, sticky="w")
+        self.stats_lbl = ttk.Label(header, text="Loading…")
+        self.stats_lbl.grid(row=0, column=1, sticky="e")
+
+        ttk.Separator(self, orient="horizontal").grid(row=1, column=0, sticky="we")
+
+        body = ttk.Frame(self)
+        body.grid(row=2, column=0, sticky="nsew", padx=12, pady=12)
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(2, weight=1)
+
+        self.prompt_lbl = ttk.Label(body, text="", font=("Segoe UI", 16, "bold"), wraplength=w - 60)
+        self.prompt_lbl.grid(row=0, column=0, sticky="w", pady=(0, 10))
+
+        self.front_lbl = ttk.Label(body, text="Recall the isiZulu sentence (then reveal).", wraplength=w - 60)
+        self.front_lbl.grid(row=1, column=0, sticky="w", pady=(0, 10))
+
+        self.answer_txt = tk.Text(body, wrap="word", state="disabled")
+        self.answer_txt.grid(row=2, column=0, sticky="nsew")
+
+        btns = ttk.Frame(self)
+        btns.grid(row=3, column=0, sticky="we", padx=12, pady=(0, 12))
+
+        self.btn_show = ttk.Button(btns, text="Show answer", command=self._reveal)
+        self.btn_show.pack(side="left")
+
+        self.btn_again = ttk.Button(btns, text="Again", command=lambda: self._grade("again"), state="disabled")
+        self.btn_hard = ttk.Button(btns, text="Hard", command=lambda: self._grade("hard"), state="disabled")
+        self.btn_good = ttk.Button(btns, text="Good", command=lambda: self._grade("good"), state="disabled")
+        self.btn_easy = ttk.Button(btns, text="Easy", command=lambda: self._grade("easy"), state="disabled")
+
+        for b in [self.btn_again, self.btn_hard, self.btn_good, self.btn_easy]:
+            b.pack(side="left", padx=(8, 0))
+
+        ttk.Separator(btns, orient="vertical").pack(side="left", fill="y", padx=12)
+        ttk.Button(btns, text="Skip", command=self._skip).pack(side="left")
+        ttk.Button(btns, text="Refresh", command=self._refresh).pack(side="left", padx=(8, 0))
+        ttk.Button(btns, text="Close", command=self.destroy).pack(side="right")
+
+        self._refresh()
+
+    def _set_answer(self, text: str):
+        self.answer_txt.configure(state="normal")
+        self.answer_txt.delete("1.0", "end")
+        self.answer_txt.insert("1.0", text or "")
+        self.answer_txt.configure(state="disabled")
+
+    def _disable_grades(self):
+        for b in [self.btn_again, self.btn_hard, self.btn_good, self.btn_easy]:
+            b.configure(state="disabled")
+
+    def _enable_grades(self):
+        for b in [self.btn_again, self.btn_hard, self.btn_good, self.btn_easy]:
+            b.configure(state="normal")
+
+    def _current_card(self) -> Optional[Dict[str, Any]]:
+        if not self._cards:
+            return None
+        self._idx = max(0, min(self._idx, len(self._cards) - 1))
+        return self._cards[self._idx]
+
+    def _refresh(self):
+        self._set_answer("")
+        self.prompt_lbl.configure(text="Loading…")
+        self.front_lbl.configure(text="")
+        self._disable_grades()
+        self._revealed = False
+        self._idx = 0
+
+        def _fetch():
+            try:
+                cards = self.repo.list_due_sentences(self.story_id, limit=15)
+            except Exception as e:
+                cards = []
+                err = str(e)
+                self.after(0, lambda: messagebox.showerror("Sentence Revision", f"Failed to load due sentences:\n{err}"))
+            self.after(0, lambda: self._set_cards(cards))
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _set_cards(self, cards: List[Dict[str, Any]]):
+        self._cards = cards or []
+        self._revealed = False
+        self._idx = 0
+        self._render()
+
+    def _render(self):
+        total = len(self._cards)
+        if total == 0:
+            self.stats_lbl.configure(text=f"Due: 0 | Reviewed: {self._reviewed}")
+            self.prompt_lbl.configure(text="No due sentences right now.")
+            self.front_lbl.configure(text="Tip: in Learn, click 'Understood' on a sentence to add it to revision.")
+            self._set_answer("")
+            self.btn_show.configure(state="disabled")
+            self._disable_grades()
+            return
+
+        self.btn_show.configure(state="normal")
+        self.stats_lbl.configure(text=f"Due: {total} | Reviewed: {self._reviewed} | {self._idx + 1}/{total}")
+
+        s = self._current_card() or {}
+        en = ((s.get("translation") or {}).get("en") or "").strip()
+        if not en:
+            en = "(No English translation saved.)"
+        self.prompt_lbl.configure(text=en)
+        self.front_lbl.configure(text="Say/type the isiZulu sentence to yourself, then reveal.")
+
+        if not self._revealed:
+            self._set_answer("")
+            self._disable_grades()
+        else:
+            self._set_answer(self._format_answer(s))
+            self._enable_grades()
+
+    def _format_answer(self, s: Dict[str, Any]) -> str:
+        zu = (s.get("text_zu") or "").strip()
+        g = s.get("grammar") or {}
+        brief = (g.get("brief") or "").strip()
+        concepts = g.get("concepts") or []
+        if isinstance(concepts, list):
+            concepts_str = ", ".join([str(c).strip() for c in concepts if str(c).strip()])
+        else:
+            concepts_str = str(concepts).strip()
+
+        lines = []
+        if zu:
+            lines.append("isiZulu:")
+            lines.append(zu)
+
+        if brief:
+            lines.append("")
+            lines.append("Grammar:")
+            lines.append(brief)
+
+        if concepts_str:
+            lines.append("")
+            lines.append(f"Concepts: {concepts_str}")
+
+        return "\n".join(lines).strip() or "(No isiZulu text saved for this sentence.)"
+
+    def _reveal(self):
+        if not self._cards:
+            return
+        self._revealed = True
+        self._render()
+
+    def _skip(self):
+        if not self._cards:
+            return
+        self._revealed = False
+        self._idx = (self._idx + 1) % len(self._cards)
+        self._render()
+
+    def _grade(self, rating: str):
+        s = self._current_card()
+        if not s:
+            return
+        sid = (s.get("id") or "").strip()
+        if not sid:
+            return
+
+        patch = sm2_update(s.get("learning") or {}, rating, now=datetime.now(timezone.utc))
+
+        def _save():
+            try:
+                self.repo.update_sentence_learning(self.story_id, sid, patch)
+            except Exception as e:
+                err = str(e)
+                self.after(0, lambda: messagebox.showerror("Sentence Revision", f"Failed to save review:\n{err}"))
+                return
+
+            def _advance():
+                self._reviewed += 1
+                if self._cards:
+                    self._cards.pop(self._idx)
+                self._revealed = False
+                if self._idx >= len(self._cards):
+                    self._idx = 0
+                self._render()
+
+            self.after(0, _advance)
+
+        threading.Thread(target=_save, daemon=True).start()
