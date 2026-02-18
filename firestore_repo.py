@@ -150,6 +150,43 @@ class FirestoreRepo:
             batch.set(ref, data, merge=True)
         batch.commit()
 
+    def delete_story(self, story_id: str, batch_size: int = 400) -> int:
+        """Deletes a story and all its sentence docs.
+
+        Firestore does not automatically delete subcollections when deleting a parent doc.
+        Returns the number of sentence docs deleted.
+        """
+        sid = (story_id or "").strip()
+        if not sid:
+            return 0
+
+        batch_size = max(1, min(int(batch_size), 450))
+
+        story_ref = self.db.collection(self.stories_collection).document(sid)
+        sentences_ref = story_ref.collection("sentences")
+
+        deleted = 0
+        batch = self.db.batch()
+        pending = 0
+
+        for snap in sentences_ref.stream():
+            if not snap.exists:
+                continue
+            batch.delete(snap.reference)
+            pending += 1
+            deleted += 1
+            if pending >= batch_size:
+                batch.commit()
+                batch = self.db.batch()
+                pending = 0
+
+        if pending:
+            batch.commit()
+
+        # Delete the parent story doc last.
+        story_ref.delete()
+        return deleted
+
     def update_sentence_learning(self, story_id: str, sentence_id: str, learning_patch: dict) -> None:
         """Updates selected fields inside a sentence's `learning` map."""
         if not story_id or not sentence_id:
