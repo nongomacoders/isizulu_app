@@ -212,3 +212,4 @@
 2026-02-18 15:57:31,983 | INFO | gemini_client | Gemini analyze_tokens request. model=gemini-3-flash-preview n_tokens=28
 2026-02-18 15:57:31,984 | INFO | google_genai.models | AFC is enabled with max remote calls: 10.
 2026-02-18 15:58:17,547 | INFO | httpx | HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent "HTTP/1.1 200 OK"
+2026-02-20 14:41:37,194 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
