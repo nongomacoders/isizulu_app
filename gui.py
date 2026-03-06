@@ -6,6 +6,7 @@ from tab_create import CreateTab
 from tab_learn import LearnTab
 from tab_theory import TheoryTab
 from tab_admin import AdminTab
+from tab_audio import AudioTab
 
 
 class MainGUI(tk.Tk):
@@ -23,12 +24,14 @@ class MainGUI(tk.Tk):
         self.learn_tab = LearnTab(self.notebook, repo=repo, gemini=service.gemini)
         self.theory_tab = TheoryTab(self.notebook, repo=repo, gemini=service.gemini)
         self.admin_tab = AdminTab(self.notebook, repo=repo)
+        self.audio_tab = AudioTab(self.notebook)
 
         # Add tabs
         self.notebook.add(self.create_tab, text="Create")
         self.notebook.add(self.learn_tab, text="Learn")
         self.notebook.add(self.theory_tab, text="Theory")
         self.notebook.add(self.admin_tab, text="Admin")
+        self.notebook.add(self.audio_tab, text="Audio")
 
         # Allow Learn tab to open Theory tab cleanly
         self.learn_tab.set_theory_tab(self.theory_tab, self.notebook)
