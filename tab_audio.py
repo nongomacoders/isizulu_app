@@ -26,6 +26,7 @@ class AudioTab(ttk.Frame):
         self.loop_poll_id = None
         self.is_looping = False
         self.current_speed = 1.0
+        self.target_speed = 1.0
         self.temp_audio_file = os.path.join(tempfile.gettempdir(), "isizulu_temp_loop.wav")
         
         self._build_ui()
@@ -66,7 +67,13 @@ class AudioTab(ttk.Frame):
         ttk.Label(time_frame, text="Stop (s):").pack(side="left", padx=(10, 0))
         self.entry_stop = ttk.Entry(time_frame, width=8)
         self.entry_stop.pack(side="left", padx=5)
-        ttk.Label(time_frame, text="(Leave empty to play to end)").pack(side="left", padx=5)
+        
+        ttk.Label(time_frame, text="Speed:").pack(side="left", padx=(10, 0))
+        self.entry_speed = ttk.Entry(time_frame, width=5)
+        self.entry_speed.pack(side="left", padx=5)
+        self.entry_speed.insert(0, "1.0")
+        
+        ttk.Label(time_frame, text="(Leave empty for end)").pack(side="left", padx=5)
         
         # Bottom Frame for Playback controls
         bottom_frame = ttk.Frame(self)
@@ -150,27 +157,62 @@ class AudioTab(ttk.Frame):
             stop_time = None
 
         try:
-            pygame.mixer.music.load(filepath)
-            pygame.mixer.music.play(start=start_time)
-            self.lbl_status.config(text=f"Playing: {filename}")
+            self.current_speed = float(self.entry_speed.get() or 1.0)
+        except ValueError:
+            self.current_speed = 1.0
+
+        try:
+            pygame.mixer.music.stop()
+            pygame.mixer.music.unload()
+        except Exception:
+            pass
+
+        # We extract the segment at normal speed first, then slow it down.
+        # This keeps the Start/Stop times relative to the original audio.
+        cmd = ["ffmpeg", "-y"]
+        if start_time > 0:
+            cmd.extend(["-ss", f"{start_time:.3f}"])
+            
+        if stop_time is not None and stop_time > start_time:
+            duration = stop_time - start_time
+            cmd.extend(["-t", f"{duration:.3f}"])
+            
+        cmd.extend(["-i", filepath])
+            
+        if self.current_speed != 1.0:
+            cmd.extend(["-filter:a", f"atempo={self.current_speed:.2f}"])
+            
+        cmd.append(self.temp_audio_file)
+        
+        try:
+            self.lbl_status.config(text=f"Processing {filename}...")
+            self.update_idletasks()
+            
+            kwargs = {}
+            if os.name == "nt":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, **kwargs)
+            
+            pygame.mixer.music.load(self.temp_audio_file)
+            pygame.mixer.music.play()
+            self.lbl_status.config(text=f"Playing: {filename} ({self.current_speed:.2f}x)")
             self.is_paused = False
             
-            if stop_time is not None and stop_time > start_time:
-                self.stop_time_ms = (stop_time - start_time) * 1000
-                self._poll_playback()
-            else:
-                self.stop_time_ms = None
-                
+            # Since ffmpeg cropped the file, we just poll to update status when finished
+            self._poll_playback()
+            
         except Exception as e:
             messagebox.showerror("Error", f"Failed to play {filename}:\n{e}")
 
     def _poll_playback(self):
-        if self.stop_time_ms is not None:
-            if pygame.mixer.music.get_busy() and not self.is_paused:
-                if pygame.mixer.music.get_pos() >= self.stop_time_ms:
-                    self._stop_audio()
-                    return
-            self.poll_id = self.after(100, self._poll_playback)
+        # We don't need to check stop_time_ms because ffmpeg already cropped it.
+        # Just check if the music naturally finished playing.
+        if not pygame.mixer.music.get_busy() and not self.is_paused:
+            self.lbl_status.config(text="Stopped")
+            self._stop_audio()
+            return
+        self.poll_id = self.after(100, self._poll_playback)
 
     def _start_loop(self):
         selection = self.listbox.curselection()
@@ -180,7 +222,14 @@ class AudioTab(ttk.Frame):
             
         self._stop_audio()
         self.is_looping = True
-        self.current_speed = 0.65
+        
+        try:
+            self.target_speed = float(self.entry_speed.get() or 1.0)
+        except ValueError:
+            self.target_speed = 1.0
+            
+        # Start looping at a slower speed relative to target speed
+        self.current_speed = max(0.5, self.target_speed - 0.35)
         self._play_loop_step()
 
     def _play_loop_step(self):
@@ -219,15 +268,19 @@ class AudioTab(ttk.Frame):
         cmd = ["ffmpeg", "-y"]
         if start_time > 0:
             cmd.extend(["-ss", f"{start_time:.3f}"])
-        cmd.extend(["-i", filepath])
-        
+            
         if stop_time is not None and stop_time > start_time:
             duration = stop_time - start_time
             cmd.extend(["-t", f"{duration:.3f}"])
             
+        cmd.extend(["-i", filepath])
+            
         cmd.extend(["-filter:a", f"atempo={self.current_speed:.2f}", self.temp_audio_file])
         
         try:
+            self.lbl_status.config(text=f"Processing {filename}...")
+            self.update_idletasks()
+            
             kwargs = {}
             if os.name == "nt":
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -250,9 +303,9 @@ class AudioTab(ttk.Frame):
             return
             
         if not pygame.mixer.music.get_busy() and not self.is_paused:
-            # Increment speed by 0.05 for a smooth transition to normal speed
+            # Increment speed by 0.05 for a smooth transition to target speed
             self.current_speed += 0.05
-            if self.current_speed > 1.01:
+            if self.current_speed > self.target_speed + 0.01:
                 self.is_looping = False
                 self.lbl_status.config(text="Loop finished")
             else:

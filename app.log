@@ -221,3 +221,9 @@
 2026-03-06 09:28:28,982 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
 2026-03-06 09:40:02,141 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
 2026-03-06 09:47:42,515 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-03-07 08:56:25,425 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-03-07 09:03:56,788 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-03-07 09:15:25,112 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-03-07 09:28:46,933 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-03-07 09:30:13,436 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2026-03-07 09:35:58,409 | WARNING | google_genai._api_client | Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
