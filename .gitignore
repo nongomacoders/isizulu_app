@@ -20,3 +20,4 @@ Thumbs.db
 .vscode/
 /.env
 /serviceAccountKey.json
+/app.log
